@@ -9,4 +9,4 @@ npm install
 node index.js mbtiles:///Users/Stephan/OSM.mbtiles http://name:password@localhost:5984/tiles
 ```
 
-Tiles URL: http://localhost:5984/tiles/{z}_{x}_{y}/tile.png
+Tiles URL: http://localhost:5984/tiles/{z}\_{x}\_{y}/tile.png
