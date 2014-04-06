@@ -1,0 +1,18 @@
+{
+  "name": "mbtiles2couchdb",
+  "version": "0.0.1",
+  "description": "Uploads mbtiles to couchdb.",
+  "main": "index.js",
+  "dependencies": {
+    "sqlite3": "2.2.0",
+    "nano": "4.7.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/StephanU/mbtiles2couchdb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/StephanU/mbtiles2couchdb/issues"
+  },
+  "homepage": "https://github.com/StephanU/mbtiles2couchdb"
+}
