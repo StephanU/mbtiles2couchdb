@@ -1,12 +1,12 @@
 if (process.argv.length !== 4) {
-  console.log("Usage: node index.js mbtiles://<path to mbtiles file> <path to couchdb>");
-  console.log("e.g. node index.js mbtiles:///Users/Stephan/OSM.mbtiles http://name:password@localhost:5984/tiles");
+  console.log("Usage: node index.js <path to mbtiles file> <path to couchdb>");
+  console.log("e.g. node index.js /Users/Stephan/OSM.mbtiles http://name:password@localhost:5984/tiles");
   return;
 } 
 
 var url = require('url'),
   sqlite3 = require('sqlite3'),
-  mbFileUrl = url.parse(process.argv[2], false),
+  mbFilePath = process.argv[2],
   couchdbUrl = url.parse(process.argv[3], false),
   nano = require('nano')(couchdbUrl.protocol + '//' + (couchdbUrl.auth ? couchdbUrl.auth + '@' : '') + couchdbUrl.host),
   couchdbName = couchdbUrl.path.substr(1),
@@ -16,15 +16,15 @@ nano.db.get(couchdbName, function(err) {
   if (err) {
     nano.db.create(couchdbName, function(err) {
       if (err) throw err;
-      mbtiles2couchdb(mbFileUrl, couchdbName);
+      mbtiles2couchdb(mbFilePath, couchdbName);
     });
   } else {
-    mbtiles2couchdb(mbFileUrl, couchdbName);
+    mbtiles2couchdb(mbFilePath, couchdbName);
   }
 });
 
-function mbtiles2couchdb(mbFileUrl, couchdbName) {
-  var mbtilesDB = new sqlite3.Database(mbFileUrl.pathname, function(err) {
+function mbtiles2couchdb(mbFilePath, couchdbName) {
+  var mbtilesDB = new sqlite3.Database(mbFilePath, function(err) {
     if (err) throw err;
     mbtilesDB.get('SELECT count(*) as numrows from tiles', function(err, row) {
       if (err) throw err;
