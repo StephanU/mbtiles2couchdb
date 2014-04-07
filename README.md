@@ -1,6 +1,6 @@
 # mbtiles2couchdb
 
-Uploads tiles from an mbtiles file to couchdb. The couchdb database will be created if it doesn't exist. The script assumes an empty database. No fancy error checking implemented...
+Uploads tiles from a mbtiles file to couchdb. The couchdb database will be created if it doesn't exist. The script assumes an empty database. No fancy error checking implemented...
 
 ## Usage
 
