@@ -5,12 +5,13 @@ if (process.argv.length !== 4) {
 } 
 
 var url = require('url'),
+  async = require('async'),
   sqlite3 = require('sqlite3'),
   mbFilePath = process.argv[2],
   couchdbUrl = url.parse(process.argv[3], false),
   nano = require('nano')(couchdbUrl.protocol + '//' + (couchdbUrl.auth ? couchdbUrl.auth + '@' : '') + couchdbUrl.host),
   couchdbName = couchdbUrl.path.substr(1),
-  rowCount;
+  db;
 
 nano.db.get(couchdbName, function(err) {
   if (err) {
@@ -25,25 +26,26 @@ nano.db.get(couchdbName, function(err) {
 
 function mbtiles2couchdb(mbFilePath, couchdbName) {
   var mbtilesDB = new sqlite3.Database(mbFilePath, function(err) {
+    db = nano.use(couchdbName);
     if (err) throw err;
     mbtilesDB.get('SELECT count(*) as numrows from tiles', function(err, row) {
       if (err) throw err;
       var rowCount = row.numrows,
         count = 0,
-        couchdb = nano.use(couchdbName);
+        queue = async.queue(upload, 20);
 
-        mbtilesDB.each('SELECT * from tiles', function(err, row) {
+      mbtilesDB.each('SELECT * from tiles', function(err, row) {
+        if (err) throw err;
+        queue.push(row, function(err) {
           if (err) throw err;
-          upload(couchdb, row, function(err) {
-            if (err) throw err;
-            console.log('Uploaded tile ' + ++count + ' of ' + rowCount);
-          });
+          console.log('Uploaded tile ' + ++count + ' of ' + rowCount);
         });
+      });
     });
   });
 }
 
-function upload(couchdb, row, cb) {
+function upload(row, cb) {
   var tile_row =  (1 << row.zoom_level) - 1 - row.tile_row,
     doc = {
       '_id': row.zoom_level + '_' + row.tile_column + '_' + tile_row,
@@ -57,5 +59,5 @@ function upload(couchdb, row, cb) {
       'content_type': 'image/png' // TODO determine actual content type of row.tile_data
     }];
 
-  couchdb.multipart.insert(doc, attachments, doc._id, cb);
+  db.multipart.insert(doc, attachments, doc._id, cb);
 }
