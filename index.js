@@ -5,7 +5,6 @@ if (process.argv.length !== 4) {
 }
 
 var url = require('url')
-var async = require('async')
 var sqlite3 = require('sqlite3')
 var path = require('path')
 var fs = require('fs')
@@ -13,9 +12,12 @@ var mbFilePath = path.resolve(__dirname, process.argv[2])
 var couchdbUrl = url.parse(process.argv[3], false)
 var nano = require('nano')(couchdbUrl.protocol + '//' + (couchdbUrl.auth ? couchdbUrl.auth + '@' : '') + couchdbUrl.host)
 var couchdbName = couchdbUrl.path.substr(1)
-var db
+var zlib = require('zlib')
 
+var db
 var paths = []
+
+var limit = 5000
 
 getAllMbtileFiles(mbFilePath)
 
@@ -45,52 +47,84 @@ function getAllMbtileFiles (mbFilePath) {
   }
 }
 
+function getSQLRequest (last_zoom_level, last_column, last_row, limit) {
+  return `SELECT * from tiles 
+          WHERE (zoom_level, tile_column, tile_row) > (` + last_zoom_level + `,` + last_column + `,` + last_row + `) 
+          ORDER BY zoom_level, tile_column, tile_row
+          LIMIT ` + limit + `;`
+}
+
 function mbtiles2couchdb (mbFilePaths, couchdbName) {
   console.log('Start Uploading ' + mbFilePaths[0])
   var mbtilesDB = new sqlite3.Database(mbFilePaths[0], function (err) {
     db = nano.use(couchdbName)
     if (err) throw err
+
     mbtilesDB.get('SELECT count(*) as numrows from tiles', function (err, row) {
       if (err) throw err
       var rowCount = row.numrows
-      var count = 0
-      var queue = async.queue(upload, 20)
-
-      mbtilesDB.each('SELECT * from tiles', function (err, row) {
-        if (err) throw err
-        queue.push(row, function (err) {
-          if (err) console.log(err)
-          process.stdout.write('\rUploaded tile ' + ++count + ' of ' + rowCount)
-        })
-      })
-
-      queue.drain = function () {
-        process.stdout.write('\nfinished' + '\n')
-        mbFilePaths.shift()
-        if (mbFilePaths.length > 0) mbtiles2couchdb(mbFilePaths, couchdbName)
-      }
+      console.log(rowCount + ' tiles found')
+      fetchAndPushToCouchAndRestart(0, 0, 0, limit, db, mbtilesDB, 0)
     })
   })
 }
 
-function upload (row, cb) {
+function fetchAndPushToCouchAndRestart (last_zoom_level, last_column, last_row, limit, couchDB, sqlLite, count) {
+  var mbtilesDB = sqlLite
+  var db = couchDB
+  mbtilesDB.all(getSQLRequest(last_zoom_level, last_column, last_row, limit), function (err, sqliteRows) {
+    if (sqliteRows.length === 0) return
+    var ids = []
+    for (var i = 0; i < sqliteRows.length; i++) {
+      var row = sqliteRows[i]
+      if (err) throw err
+      var tileRow = (1 << row.zoom_level) - 1 - row.tile_row
+      ids.push(row.zoom_level + '_' + row.tile_column + '_' + tileRow)
+    }
+  // console.log(JSON.stringify({keys: ids}))
+    db.fetchRevs({keys: ids}, function (err, response) {
+      if (err) throw err
+      var bulk_docs = {'docs': []}
+      for (var i = 0; i < response.rows.length; i++) {
+        var rev = (response.rows[i].error) ? null : response.rows[i].value.rev
+        bulk_docs.docs.push(getCouchDbDoc(sqliteRows[i], rev))
+      }
+      db.bulk(bulk_docs, function (err, body) {
+        if (err) throw err
+        var newCount = count + body.length
+        process.stdout.write('\r' + newCount + ' pushed')
+        if (sqliteRows.length === limit) {
+          var new_last_zoom = sqliteRows[sqliteRows.length - 1].zoom_level
+          var new_last_column = sqliteRows[sqliteRows.length - 1].tile_column
+          var new_last_row = sqliteRows[sqliteRows.length - 1].tile_row
+          fetchAndPushToCouchAndRestart(new_last_zoom, new_last_column, new_last_row, limit, couchDB, sqlLite, newCount)
+        } else {
+          console.log('finished')
+        }
+      })
+    })
+  })
+}
+
+function getCouchDbDoc (row, rev) {
   var tileRow = (1 << row.zoom_level) - 1 - row.tile_row
+
+  var attachments = [{
+    'data': zlib.unzipSync(row.tile_data),
+    'content_type': 'application/x-protobuf' // TODO determine actual content type of row.tile_data
+  }]
   var doc = {
     '_id': row.zoom_level + '_' + row.tile_column + '_' + tileRow,
     'zoom_level': row.zoom_level,
     'tile_column': row.tile_column,
-    'tile_row': tileRow
-  }
-  var attachments = [{
-    'name': 'tile.png',
-    'data': row.tile_data,
-    'content_type': 'image/png' // TODO determine actual content type of row.tile_data
-  }]
-  db.get(doc._id, function (err, response) {
-    if (!err) {
-      doc._rev = response._rev
+    'tile_row': tileRow,
+    '_attachments': {
+      'tile.pbf': {
+        'data': zlib.unzipSync(row.tile_data).toString('base64'),
+        'content_type': 'application/x-protobuf' // TODO determine actual content type of row.tile_data
+      }
     }
-    db.multipart.insert(doc, attachments, doc._id, cb)
-  })
+  }
+  if (rev) doc._rev = rev
+  return doc
 }
-
