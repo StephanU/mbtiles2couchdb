@@ -47,9 +47,9 @@ function getAllMbtileFiles (mbFilePath) {
   }
 }
 
-function getSQLRequest (last_zoom_level, last_column, last_row, limit) {
+function getSQLRequest (lastZoomLevel, lastColumn, lastRow, limit) {
   return `SELECT * from tiles 
-          WHERE (zoom_level, tile_column, tile_row) > (` + last_zoom_level + `,` + last_column + `,` + last_row + `) 
+          WHERE (zoom_level, tile_column, tile_row) > (` + lastZoomLevel + `,` + lastColumn + `,` + lastRow + `) 
           ORDER BY zoom_level, tile_column, tile_row
           LIMIT ` + limit + `;`
 }
@@ -69,10 +69,10 @@ function mbtiles2couchdb (mbFilePaths, couchdbName) {
   })
 }
 
-function fetchAndPushToCouchAndRestart (last_zoom_level, last_column, last_row, limit, couchDB, sqlLite, count) {
+function fetchAndPushToCouchAndRestart (lastZoomLevel, lastColumn, lastRow, limit, couchDB, sqlLite, count) {
   var mbtilesDB = sqlLite
   var db = couchDB
-  mbtilesDB.all(getSQLRequest(last_zoom_level, last_column, last_row, limit), function (err, sqliteRows) {
+  mbtilesDB.all(getSQLRequest(lastZoomLevel, lastColumn, lastRow, limit), function (err, sqliteRows) {
     if (sqliteRows.length === 0) return
     var ids = []
     for (var i = 0; i < sqliteRows.length; i++) {
@@ -84,20 +84,20 @@ function fetchAndPushToCouchAndRestart (last_zoom_level, last_column, last_row, 
   // console.log(JSON.stringify({keys: ids}))
     db.fetchRevs({keys: ids}, function (err, response) {
       if (err) throw err
-      var bulk_docs = {'docs': []}
+      var bulkDocs = {'docs': []}
       for (var i = 0; i < response.rows.length; i++) {
         var rev = (response.rows[i].error) ? null : response.rows[i].value.rev
-        bulk_docs.docs.push(getCouchDbDoc(sqliteRows[i], rev))
+        bulkDocs.docs.push(getCouchDbDoc(sqliteRows[i], rev))
       }
-      db.bulk(bulk_docs, function (err, body) {
+      db.bulk(bulkDocs, function (err, body) {
         if (err) throw err
         var newCount = count + body.length
         process.stdout.write('\r' + newCount + ' pushed')
         if (sqliteRows.length === limit) {
-          var new_last_zoom = sqliteRows[sqliteRows.length - 1].zoom_level
-          var new_last_column = sqliteRows[sqliteRows.length - 1].tile_column
-          var new_last_row = sqliteRows[sqliteRows.length - 1].tile_row
-          fetchAndPushToCouchAndRestart(new_last_zoom, new_last_column, new_last_row, limit, couchDB, sqlLite, newCount)
+          var newLastZoom = sqliteRows[sqliteRows.length - 1].zoom_level
+          var newLastColumn = sqliteRows[sqliteRows.length - 1].tile_column
+          var newLastRow = sqliteRows[sqliteRows.length - 1].tile_row
+          fetchAndPushToCouchAndRestart(newLastZoom, newLastColumn, newLastRow, limit, couchDB, sqlLite, newCount)
         } else {
           console.log('finished')
         }
