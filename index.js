@@ -64,7 +64,8 @@ function mbtiles2couchdb (mbFilePaths, couchdbName) {
       if (err) throw err
       var rowCount = row.numrows
       console.log(rowCount + ' tiles found')
-      fetchAndPushToCouchAndRestart(0, 0, 0, limit, db, mbtilesDB, 0)
+     // console.log(new Date() + ' starting Upload')
+      fetchAndPushToCouchAndRestart(-1, 0, 0, limit, db, mbtilesDB, 0)
     })
   })
 }
@@ -81,9 +82,10 @@ function fetchAndPushToCouchAndRestart (lastZoomLevel, lastColumn, lastRow, limi
       var tileRow = (1 << row.zoom_level) - 1 - row.tile_row
       ids.push(row.zoom_level + '_' + row.tile_column + '_' + tileRow)
     }
-  // console.log(JSON.stringify({keys: ids}))
+   // console.log(new Date() + ' finished sqlite fetch')
     db.fetchRevs({keys: ids}, function (err, response) {
       if (err) throw err
+     // console.log(new Date() + ' finished fetch revs')
       var bulkDocs = {'docs': []}
       for (var i = 0; i < response.rows.length; i++) {
         var rev = (response.rows[i].error) ? null : response.rows[i].value.rev
@@ -91,8 +93,9 @@ function fetchAndPushToCouchAndRestart (lastZoomLevel, lastColumn, lastRow, limi
       }
       db.bulk(bulkDocs, function (err, body) {
         if (err) throw err
+       // console.log(new Date() + ' finished bulk')
         var newCount = count + body.length
-        process.stdout.write('\r' + newCount + ' pushed')
+        // process.stdout.write('\r' + newCount + ' pushed')
         if (sqliteRows.length === limit) {
           var newLastZoom = sqliteRows[sqliteRows.length - 1].zoom_level
           var newLastColumn = sqliteRows[sqliteRows.length - 1].tile_column
