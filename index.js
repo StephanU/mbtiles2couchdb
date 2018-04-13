@@ -95,7 +95,7 @@ function fetchAndPushToCouchAndRestart (lastZoomLevel, lastColumn, lastRow, limi
         if (err) throw err
        // console.log(new Date() + ' finished bulk')
         var newCount = count + body.length
-        // process.stdout.write('\r' + newCount + ' pushed')
+        process.stdout.write('\r' + newCount + ' pushed')
         if (sqliteRows.length === limit) {
           var newLastZoom = sqliteRows[sqliteRows.length - 1].zoom_level
           var newLastColumn = sqliteRows[sqliteRows.length - 1].tile_column
