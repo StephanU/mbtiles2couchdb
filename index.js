@@ -64,7 +64,7 @@ function mbtiles2couchdb (mbFilePaths, couchdbName) {
       if (err) throw err
       var rowCount = row.numrows
       console.log(rowCount + ' tiles found')
-     // console.log(new Date() + ' starting Upload')
+      // console.log(new Date() + ' starting Upload')
       fetchAndPushToCouchAndRestart(-1, 0, 0, limit, db, mbtilesDB, 0)
     })
   })
@@ -82,18 +82,21 @@ function fetchAndPushToCouchAndRestart (lastZoomLevel, lastColumn, lastRow, limi
       var tileRow = (1 << row.zoom_level) - 1 - row.tile_row
       ids.push(row.zoom_level + '_' + row.tile_column + '_' + tileRow)
     }
-   // console.log(new Date() + ' finished sqlite fetch')
-    db.fetchRevs({keys: ids}, function (err, response) {
+    // console.log(new Date() + ' finished sqlite fetch')
+    db.fetchRevs({ keys: ids }, function (err, response) {
       if (err) throw err
-     // console.log(new Date() + ' finished fetch revs')
-      var bulkDocs = {'docs': []}
+      // console.log(new Date() + ' finished fetch revs')
+      var bulkDocs = { 'docs': [] }
       for (var i = 0; i < response.rows.length; i++) {
         var rev = (response.rows[i].error) ? null : response.rows[i].value.rev
         bulkDocs.docs.push(getCouchDbDoc(sqliteRows[i], rev))
       }
-      db.bulk(bulkDocs, function (err, body) {
-        if (err) throw err
-       // console.log(new Date() + ' finished bulk')
+      db.bulk(bulkDocs, function (error, body) {
+        if (error) throw error
+        for (var i = 0; i < body.length; i++) {
+          if (body[i].error) throw body[i].error
+        }
+        // console.log(new Date() + ' finished bulk')
         var newCount = count + body.length
         process.stdout.write('\r' + newCount + ' pushed')
         if (sqliteRows.length === limit) {
@@ -102,7 +105,7 @@ function fetchAndPushToCouchAndRestart (lastZoomLevel, lastColumn, lastRow, limi
           var newLastRow = sqliteRows[sqliteRows.length - 1].tile_row
           fetchAndPushToCouchAndRestart(newLastZoom, newLastColumn, newLastRow, limit, couchDB, sqlLite, newCount)
         } else {
-          console.log('finished')
+          console.log(' finished')
         }
       })
     })
@@ -121,6 +124,7 @@ function getCouchDbDoc (row, rev) {
     'zoom_level': row.zoom_level,
     'tile_column': row.tile_column,
     'tile_row': tileRow,
+    'type': 'map_tile@1.0.0',
     '_attachments': {
       'tile.pbf': {
         'data': zlib.unzipSync(row.tile_data).toString('base64'),
