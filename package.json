@@ -5,7 +5,7 @@
   "main": "index.js",
   "dependencies": {
     "nano": "^6.4.1",
-    "sqlite3": "^4.0.8",
+    "sqlite3": "^5.0.2",
     "zlib": "^1.0.5"
   },
   "repository": {
