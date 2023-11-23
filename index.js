@@ -10,14 +10,16 @@ var path = require('path')
 var fs = require('fs')
 var mbFilePath = path.resolve(__dirname, process.argv[2])
 var couchdbUrl = url.parse(process.argv[3], false)
-var nano = require('nano')(couchdbUrl.protocol + '//' + (couchdbUrl.auth ? couchdbUrl.auth + '@' : '') + couchdbUrl.host)
+var nano = require('nano')(
+  couchdbUrl.protocol + '//' + (couchdbUrl.auth ? couchdbUrl.auth + '@' : '') + couchdbUrl.host
+)
 var couchdbName = couchdbUrl.path.substr(1)
 var zlib = require('zlib')
 
 var db
 var paths = []
 
-var limit = 5000
+var limit = 3000
 
 getAllMbtileFiles(mbFilePath)
 
@@ -32,7 +34,7 @@ nano.db.get(couchdbName, function (err) {
   }
 })
 
-function getAllMbtileFiles (mbFilePath) {
+function getAllMbtileFiles(mbFilePath) {
   // Check if mbFilePath is directory,
   // if so read all mbtile files (recursive) and fill an array with it's path, else create an array with one entry
   var stat = fs.statSync(mbFilePath)
@@ -47,14 +49,24 @@ function getAllMbtileFiles (mbFilePath) {
   }
 }
 
-function getSQLRequest (lastZoomLevel, lastColumn, lastRow, limit) {
-  return `SELECT * from tiles 
-          WHERE (zoom_level, tile_column, tile_row) > (` + lastZoomLevel + `,` + lastColumn + `,` + lastRow + `) 
+function getSQLRequest(lastZoomLevel, lastColumn, lastRow, limit) {
+  return (
+    `SELECT * from tiles 
+          WHERE (zoom_level, tile_column, tile_row) > (` +
+    lastZoomLevel +
+    `,` +
+    lastColumn +
+    `,` +
+    lastRow +
+    `) 
           ORDER BY zoom_level, tile_column, tile_row
-          LIMIT ` + limit + `;`
+          LIMIT ` +
+    limit +
+    `;`
+  )
 }
 
-function mbtiles2couchdb (mbFilePaths, couchdbName) {
+function mbtiles2couchdb(mbFilePaths, couchdbName) {
   console.log('Start Uploading ' + mbFilePaths[0])
   var mbtilesDB = new sqlite3.Database(mbFilePaths[0], function (err) {
     db = nano.use(couchdbName)
@@ -70,7 +82,7 @@ function mbtiles2couchdb (mbFilePaths, couchdbName) {
   })
 }
 
-function fetchAndPushToCouchAndRestart (lastZoomLevel, lastColumn, lastRow, limit, couchDB, sqlLite, count) {
+function fetchAndPushToCouchAndRestart(lastZoomLevel, lastColumn, lastRow, limit, couchDB, sqlLite, count) {
   var mbtilesDB = sqlLite
   var db = couchDB
   mbtilesDB.all(getSQLRequest(lastZoomLevel, lastColumn, lastRow, limit), function (err, sqliteRows) {
@@ -86,9 +98,9 @@ function fetchAndPushToCouchAndRestart (lastZoomLevel, lastColumn, lastRow, limi
     db.fetchRevs({ keys: ids }, function (err, response) {
       if (err) throw err
       // console.log(new Date() + ' finished fetch revs')
-      var bulkDocs = { 'docs': [] }
+      var bulkDocs = { docs: [] }
       for (var i = 0; i < response.rows.length; i++) {
-        var rev = (response.rows[i].error) ? null : response.rows[i].value.rev
+        var rev = response.rows[i].error ? null : response.rows[i].value.rev
         bulkDocs.docs.push(getCouchDbDoc(sqliteRows[i], rev))
       }
       db.bulk(bulkDocs, function (error, body) {
@@ -112,23 +124,25 @@ function fetchAndPushToCouchAndRestart (lastZoomLevel, lastColumn, lastRow, limi
   })
 }
 
-function getCouchDbDoc (row, rev) {
+function getCouchDbDoc(row, rev) {
   var tileRow = (1 << row.zoom_level) - 1 - row.tile_row
 
-  var attachments = [{
-    'data': zlib.unzipSync(row.tile_data),
-    'content_type': 'application/x-protobuf' // TODO determine actual content type of row.tile_data
-  }]
+  var attachments = [
+    {
+      data: zlib.unzipSync(row.tile_data),
+      content_type: 'application/x-protobuf' // TODO determine actual content type of row.tile_data
+    }
+  ]
   var doc = {
-    '_id': row.zoom_level + '_' + row.tile_column + '_' + tileRow,
-    'zoom_level': row.zoom_level,
-    'tile_column': row.tile_column,
-    'tile_row': tileRow,
-    'type': 'map_tile@1.0.0',
-    '_attachments': {
+    _id: row.zoom_level + '_' + row.tile_column + '_' + tileRow,
+    zoom_level: row.zoom_level,
+    tile_column: row.tile_column,
+    tile_row: tileRow,
+    type: 'map_tile@1.0.0',
+    _attachments: {
       'tile.pbf': {
-        'data': zlib.unzipSync(row.tile_data).toString('base64'),
-        'content_type': 'application/x-protobuf' // TODO determine actual content type of row.tile_data
+        data: zlib.unzipSync(row.tile_data).toString('base64'),
+        content_type: 'application/x-protobuf' // TODO determine actual content type of row.tile_data
       }
     }
   }
